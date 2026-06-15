@@ -36,14 +36,14 @@ def apply_eligibility_filter(df: pd.DataFrame) -> pd.DataFrame:
     return df[big_enough & has_track_record].copy()
 
 
-def compute_composite_score(df: pd.DataFrame) -> pd.DataFrame:
+def compute_composite_score(df: pd.DataFrame, weights: dict = WEIGHTS) -> pd.DataFrame:
     df = df.copy()
 
     # Percentile rank within category: 1.0 = best in category, 0.0 = worst.
-    for metric in WEIGHTS:
+    for metric in weights:
         df[f"{metric}_pct"] = df.groupby("category")[metric].rank(pct=True)
 
-    df["composite_score"] = sum(WEIGHTS[m] * df[f"{m}_pct"] for m in WEIGHTS)
+    df["composite_score"] = sum(weights[m] * df[f"{m}_pct"] for m in weights)
 
     # Rank 1 = highest composite score within its category.
     df["category_rank"] = (

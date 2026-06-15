@@ -47,8 +47,9 @@ Order: **#1 Mutual Fund Analytics Automation → #2 AI Asset Allocation Tool →
 
 - `src/fetch_raw_data.py` added (Step 0): downloads `mutual_fund_data.csv` from GitHub, skips if cached. Pipeline is now fully self-contained, no manual downloads.
 
-## Project 1 Status: PIPELINE COMPLETE
-Veer asked about adding an interactive dashboard (Streamlit) on top of this - in progress now (see below).
+- `dashboard/app.py` (Streamlit) added: category selector, ranked table with top-3 highlighting, composite-score bar chart, and live weight sliders (Sharpe/Alpha/Consistency) that recompute rankings via the same `compute_composite_score()` from `src/scoring.py` (now parameterized with a `weights` arg instead of using the module-level `WEIGHTS` directly). Tested: `streamlit run dashboard/app.py` starts cleanly (HTTP 200, no errors), and the scoring logic was sanity-checked standalone with custom weights. README updated with a "Dashboard" section.
+
+## Project 1 Status: PIPELINE + DASHBOARD COMPLETE
 
 ## Next Step
-Building a Streamlit dashboard (`dashboard/app.py`) for Project 1: category selector, ranked table, and interactive weight sliders (Sharpe/Alpha/Consistency) that recompute the composite score live using metrics.csv. After that, decide: more Project 1 polish, or move to Project #6 (Goal Planning/SIP Calculator) per the "Overall Plan" order.
+Decide: more Project 1 polish (e.g. more metrics on the dashboard, deploy to Streamlit Community Cloud), or move to Project #6 (Goal Planning/SIP Calculator) per the "Overall Plan" order.

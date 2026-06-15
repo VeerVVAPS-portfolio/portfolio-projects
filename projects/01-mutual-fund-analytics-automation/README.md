@@ -54,6 +54,17 @@ src/
 
 Run the whole pipeline with `python src/main.py` (from the project root). Fetch steps are skipped if their cached output already exists.
 
+## Dashboard
+An interactive Streamlit dashboard (`dashboard/app.py`) sits on top of the Stage 1 eligible funds:
+- Pick a category and see its ranked table + a bar chart of composite scores, with the top 3 highlighted (same logic as the Excel report).
+- Adjust the Sharpe / Jensen's Alpha / Consistency weight sliders to see rankings recompute live, reusing `compute_composite_score()` from `src/scoring.py` (no duplicated logic).
+
+Run with:
+```
+streamlit run dashboard/app.py
+```
+(from the project root — `data/processed/schemes.csv` and `metrics.csv` must already exist, i.e. the pipeline must have been run at least once).
+
 ## Assumptions
 - **Risk-free rate**: 7% (proxy for India 10Y G-Sec yield), used for Sharpe/Alpha.
 - **Beta/Sharpe/Alpha window**: trailing 3 years of daily returns vs NIFTY 50.
