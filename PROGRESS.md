@@ -38,5 +38,9 @@ Order: **#1 Mutual Fund Analytics Automation → #2 AI Asset Allocation Tool →
   - `consistency` — % of rolling 3yr windows (monthly) where fund beat its category average 3yr return (35 funds with <3yr history have none)
 - **Eligibility finding**: Multi Cap (4/18) and Flexi Cap (11/25) categories have few funds with 5yr+ track record — due to SEBI's 2020 category redefinition, not a data issue. Decided: don't force "top N per category" — rank whatever passes the filter and report the eligible count.
 
+- **AUM threshold confirmed: ₹1,000cr** (not the original ₹10,000cr, which would zero out Dividend Yield and leave only 1 Value fund — checked the distribution across all 10 categories first).
+- `src/scoring.py` complete and run: **93/184 funds eligible** (AUM>=1000cr AND 5yr track record). Every category has >=3 eligible funds (Multi Cap tightest at 4). Composite score = equal-weighted (1/3 each) percentile ranks of Sharpe/Alpha/Consistency within category -> `data/processed/scored_funds.csv`. Top picks per category look sensible (recognizable AMCs, coherent metric combos).
+- README updated with assumptions (risk-free rate, lookback window, AUM threshold) and current results summary.
+
 ## Next Step
-Build `src/scoring.py`: Stage 1 eligibility filter (AUM threshold + 5yr track record), Stage 2 composite score from percentile ranks of Sharpe/Alpha/Consistency combined via user-configurable weights, ranked within each category.
+Build `src/report.py` (multi-sheet Excel output via openpyxl - one sheet per category highlighting top picks, plus a summary sheet) and `src/main.py` (pipeline entrypoint chaining all steps). Pipeline is otherwise functionally complete end-to-end.

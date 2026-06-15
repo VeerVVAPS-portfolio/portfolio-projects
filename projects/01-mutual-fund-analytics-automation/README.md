@@ -44,13 +44,22 @@ Rank within each category; output top N per category plus full ranked list.
 ## Pipeline
 ```
 src/
-  fetch_schemes.py     # scheme list + category classification
-  fetch_nav_history.py # historical NAV per scheme, cached to data/raw/
-  metrics.py            # returns, Beta, Sharpe Ratio
-  scoring.py            # normalization + weighted composite score + ranking
-  report.py             # multi-sheet Excel output
-  main.py               # pipeline entrypoint
+  fetch_schemes.py     # scheme list + category classification (184 funds, 10 categories)
+  fetch_nav_history.py # historical NAV per scheme, cached to data/raw/nav_history/
+  fetch_benchmark.py   # NIFTY 50 history, cached to data/raw/nifty50.csv
+  metrics.py            # returns (CAGR), Beta, Sharpe, Jensen's Alpha, Consistency
+  scoring.py            # eligibility filter + weighted composite score + ranking
+  report.py             # multi-sheet Excel output (TODO)
+  main.py               # pipeline entrypoint (TODO)
 ```
+
+## Assumptions
+- **Risk-free rate**: 7% (proxy for India 10Y G-Sec yield), used for Sharpe/Alpha.
+- **Beta/Sharpe/Alpha window**: trailing 3 years of daily returns vs NIFTY 50.
+- **Eligibility (Stage 1)**: AUM >= ₹1,000cr (liquidity/stability gate - the original ₹10,000cr would have zeroed out smaller categories like Dividend Yield) and 5-year+ track record.
+
+## Results (current)
+93 of 184 funds pass eligibility. Every category retains at least 3 eligible funds (Multi Cap is the tightest at 4, due to SEBI's 2020 category redefinition creating mostly newer funds in that category). See `data/processed/scored_funds.csv` for the full ranked list.
 
 ## Status
 In progress — see [PROJECTS.md](C:\Users\VEER\.claude\PROJECTS.md) for overall tracker.
