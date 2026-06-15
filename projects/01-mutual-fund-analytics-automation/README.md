@@ -13,12 +13,27 @@ Automates the mutual fund screening & ranking process Veer originally did manual
 
 **Scope:** All AMFI-registered equity mutual fund schemes (~2000), not just a hand-picked shortlist.
 
-**Scoring methodology — Weighted Composite Score:**
-1. For each category, compute for every scheme: AUM, 1Y/3Y/5Y returns (CAGR), Beta (vs NIFTY 50), Sharpe Ratio.
-2. **Normalize** each metric to a 0–100 scale within its category (so AUM in crores and returns in % are comparable, and one metric can't dominate by sheer magnitude — this was the main flaw in the original `AUM × ... ` product formula).
-3. Beta is normalized so **lower volatility scores higher** (configurable — some users may prefer higher beta for aggressive growth).
-4. Combine normalized metrics into a single score using **user-configurable weights** (e.g., `AUM: 15%, 3Y: 25%, 5Y: 20%, Beta: 15%, Sharpe: 25%`) — this delivers on the "give weight based on preference" idea from the original sheet, which wasn't actually implemented.
-5. Rank within each category; output top N per category plus full ranked list.
+### Why not just "normalize everything and weight it"?
+
+An earlier draft of this design proposed normalizing AUM, 1Y/3Y/5Y/10Y returns, Beta, and Sharpe Ratio to 0-100 and combining them all with configurable weights. On review, this has real problems:
+- **Double-counting**: Sharpe Ratio is *already* `(return − risk-free) / volatility`. Weighting raw returns, Beta, *and* Sharpe separately counts the same return/risk relationship multiple times.
+- **Min-max normalization is fragile**: one outlier fund skews the 0-100 scale for everyone else in its category.
+- **Mixes "eligibility" with "quality"**: AUM and track-record length aren't things where "more is always better on a sliding scale" — they're gates ("is this fund viable to recommend?"), not performance signals.
+
+### Final Design: Two-Stage (Filter → Score)
+
+**Stage 1 — Eligibility filters (pass/fail, not scored):**
+- AUM ≥ threshold (liquidity/stability gate)
+- Fund track record ≥ 5 years (so 5Y return is meaningful)
+
+**Stage 2 — Composite score from three independent dimensions, each as a percentile rank within category:**
+1. **Sharpe Ratio** — total risk-adjusted return
+2. **Jensen's Alpha** (CAPM-based: `Actual Return − [Risk-free + Beta × (Market Return − Risk-free)]`) — measures manager skill beyond what the fund's market risk exposure (Beta) would predict
+3. **Consistency** — % of rolling 3-year periods the fund beat its category average (vs. a single static snapshot)
+
+Percentile-rank normalization (Morningstar-style: "beats X% of peers on this metric") is robust to outliers and easy to explain. **User-configurable weights** apply across these three dimensions — this is where the original "give weight based on preference" idea actually lands well, since the three inputs are largely independent.
+
+Rank within each category; output top N per category plus full ranked list.
 
 ## Data Sources
 - **Scheme list & categories:** AMFI `NAVAll.txt`
