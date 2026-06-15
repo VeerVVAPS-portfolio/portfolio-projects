@@ -94,6 +94,49 @@ def compute_fund_metrics(scheme_code: int, nifty_returns: pd.Series) -> dict:
     return metrics
 
 
+def compute_consistency_table(schemes: pd.DataFrame) -> pd.Series:
+    """
+    For each fund, find the % of trailing-3-year windows (sampled monthly)
+    where its 3-year return beat its category's average 3-year return in
+    that same window.
+
+    Returns a Series of consistency scores (0-1) indexed by scheme_code.
+    Funds with less than 3 years of history get no rows at all (NaN after
+    merging back in main()).
+    """
+    rows = []
+    for row in schemes.itertuples():
+        nav = load_nav_series(row.scheme_code)
+        monthly_nav = nav.resample("ME").last()
+
+        # 3-year CAGR ending at each month-end, using the NAV from 36 months
+        # earlier. shift(36) lines up "now" with "36 months ago" so we can
+        # divide them directly.
+        rolling_3y = (monthly_nav / monthly_nav.shift(36)) ** (1 / 3) - 1
+        rolling_3y = rolling_3y.dropna()
+
+        for date, value in rolling_3y.items():
+            rows.append({
+                "scheme_code": row.scheme_code,
+                "category": row.category,
+                "date": date,
+                "rolling_3y_return": value,
+            })
+
+    long_df = pd.DataFrame(rows)
+
+    # For every (date, category) group, compute the average return and
+    # broadcast it back onto every row in that group - transform() keeps
+    # the original row count, unlike agg()/mean() which collapses to one
+    # row per group.
+    long_df["category_avg"] = long_df.groupby(["date", "category"])["rolling_3y_return"].transform("mean")
+    long_df["beat_category"] = long_df["rolling_3y_return"] > long_df["category_avg"]
+
+    consistency = long_df.groupby("scheme_code")["beat_category"].mean()
+    consistency.name = "consistency"
+    return consistency
+
+
 def main():
     schemes = pd.read_csv("data/processed/schemes.csv")
     nifty_returns = load_nifty_returns()
@@ -107,11 +150,16 @@ def main():
         records.append(m)
 
     result = pd.DataFrame(records)
+
+    consistency = compute_consistency_table(schemes)
+    result = result.merge(consistency, left_on="scheme_code", right_index=True, how="left")
+
     result.to_csv("data/processed/metrics.csv", index=False)
     print(f"Saved metrics for {len(result)} funds to data/processed/metrics.csv")
     print(f"\nFunds missing 10Y return: {result['return_10y'].isna().sum()}")
     print(f"Funds missing 5Y return: {result['return_5y'].isna().sum()}")
     print(f"Funds with no Beta/Sharpe/Alpha: {result['beta'].isna().sum()}")
+    print(f"Funds with no Consistency score: {result['consistency'].isna().sum()}")
 
 
 if __name__ == "__main__":

@@ -30,8 +30,13 @@ Order: **#1 Mutual Fund Analytics Automation → #2 AI Asset Allocation Tool →
 
 - `src/fetch_nav_history.py` done and run successfully: all **184/184 funds** cached to `data/raw/nav_history/{scheme_code}.json` (full daily NAV history per fund, e.g. 2,951 records spanning 2014-2026 for a typical fund). API (`mfapi.in`) is slow (~13s/request for full history) but caching makes this a one-time cost; script is resumable (skips already-cached files). First run: 167/184 succeeded, 17 timed out at 15s; retried with 30s timeout -> 0 failures.
 
-**Open/unresolved:**
-- Risk-free rate assumption for Sharpe/Alpha (CAPM) — asked Veer to confirm hardcoding ~7% (India 10Y G-sec proxy); awaiting answer before starting `metrics.py`.
+- **Risk-free rate confirmed: 7%** (India 10Y G-Sec proxy), hardcoded as `RISK_FREE_RATE` in `metrics.py`.
+- `src/fetch_benchmark.py` caches NIFTY 50 daily closes (2007-2026) via `yfinance` -> `data/raw/nifty50.csv` (gitignored).
+- `src/metrics.py` complete and run on all 184 funds -> `data/processed/metrics.csv`. Computes:
+  - `return_1y/3y/5y/10y` (CAGR; None if fund doesn't have that much history — 110 funds lack 10Y, 73 lack 5Y)
+  - `beta/sharpe/alpha` over trailing 3 years vs NIFTY 50 (3 very new 2025-launched funds have none — expected)
+  - `consistency` — % of rolling 3yr windows (monthly) where fund beat its category average 3yr return (35 funds with <3yr history have none)
+- **Eligibility finding**: Multi Cap (4/18) and Flexi Cap (11/25) categories have few funds with 5yr+ track record — due to SEBI's 2020 category redefinition, not a data issue. Decided: don't force "top N per category" — rank whatever passes the filter and report the eligible count.
 
 ## Next Step
-Once risk-free rate is confirmed, build `src/metrics.py`: from cached NAV history, compute daily returns (`pct_change`), CAGR (1Y/3Y/5Y/10Y), Beta vs NIFTY 50 (via `yfinance` `^NSEI`), Sharpe Ratio, Jensen's Alpha (CAPM), and the Consistency metric (rolling 3yr win-rate vs category average).
+Build `src/scoring.py`: Stage 1 eligibility filter (AUM threshold + 5yr track record), Stage 2 composite score from percentile ranks of Sharpe/Alpha/Consistency combined via user-configurable weights, ranked within each category.
