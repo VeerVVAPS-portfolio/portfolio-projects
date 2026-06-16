@@ -1,83 +1,77 @@
 # Mutual Fund Analytics Automation
 
-Automates the mutual fund screening & ranking process Veer originally did manually during the Bajaj Capital internship (sourcing data from MoneyControl, filtering, and scoring funds by hand in Excel).
+[![Live Dashboard](https://img.shields.io/badge/Live%20Dashboard-Streamlit-FF4B4B?logo=streamlit)](https://mutual-fund-analytics-nrcwcuthktrxzca5golsnn.streamlit.app/)
 
-## Original Manual Process (`Redesigned_portfolio.xlsx` → "Scheme Recommendation" sheet)
+Automates the manual process of screening and ranking Indian equity mutual funds — a task typically done by hand across multiple sources. Replaces ad-hoc Excel scoring with a reproducible Python pipeline and an interactive dashboard.
 
-- **Universe:** Equity mutual funds across 4 categories — Large Cap, Mid Cap, Small Cap, ELSS
-- **Pre-filters (applied manually):** AUM > ₹10,000 Cr, MoneyControl star rating ≥ 4
-- **Score:** `AUM × 3Y return × 5Y return × 10Y return` (Beta and Sharpe Ratio were captured but not actually used in the score)
-- **Ranking:** `RANK.EQ` within each category — top-ranked fund = recommendation
+## The Problem with Standard Fund Rankings
 
-## Automated, Improved Version (this project)
+Most fund comparison tools rank by raw 1Y / 3Y / 5Y returns. This has two issues:
+- **Double-counting:** Sharpe Ratio already captures return relative to risk. Adding raw returns on top counts the same thing twice.
+- **Snapshot bias:** A fund that did well in one 3-year window looks identical to one that consistently beat peers across every rolling window.
 
-**Scope:** All diversified equity mutual fund schemes across **10 categories** — Large Cap, Large & Mid Cap, Mid Cap, Small Cap, Multi Cap, Flexi Cap, Value, Focused, Dividend Yield, and ELSS (184 active funds as of June 2026). Originally limited to the 4 categories in the manual template (Large/Mid/Small Cap, ELSS); expanded to cover all diversified equity categories that share NIFTY 50 as a benchmark. Sectoral/thematic, debt, hybrid, and index funds are excluded since they need different benchmarks or scoring logic — candidates for a future extension.
+## Design: Two-Stage (Filter → Score)
 
-### Why not just "normalize everything and weight it"?
+**Stage 1 — Eligibility (pass/fail, not scored):**
+- AUM ≥ ₹1,000 Cr — liquidity and stability gate
+- 5-year track record — enough history for meaningful risk metrics
 
-An earlier draft of this design proposed normalizing AUM, 1Y/3Y/5Y/10Y returns, Beta, and Sharpe Ratio to 0-100 and combining them all with configurable weights. On review, this has real problems:
-- **Double-counting**: Sharpe Ratio is *already* `(return − risk-free) / volatility`. Weighting raw returns, Beta, *and* Sharpe separately counts the same return/risk relationship multiple times.
-- **Min-max normalization is fragile**: one outlier fund skews the 0-100 scale for everyone else in its category.
-- **Mixes "eligibility" with "quality"**: AUM and track-record length aren't things where "more is always better on a sliding scale" — they're gates ("is this fund viable to recommend?"), not performance signals.
-
-### Final Design: Two-Stage (Filter → Score)
-
-**Stage 1 — Eligibility filters (pass/fail, not scored):**
-- AUM ≥ threshold (liquidity/stability gate)
-- Fund track record ≥ 5 years (so 5Y return is meaningful)
+93 of 184 funds pass.
 
 **Stage 2 — Composite score from three independent dimensions, each as a percentile rank within category:**
-1. **Sharpe Ratio** — total risk-adjusted return
-2. **Jensen's Alpha** (CAPM-based: `Actual Return − [Risk-free + Beta × (Market Return − Risk-free)]`) — measures manager skill beyond what the fund's market risk exposure (Beta) would predict
-3. **Consistency** — % of rolling 3-year periods the fund beat its category average (vs. a single static snapshot)
+1. **Sharpe Ratio** — return per unit of volatility
+2. **Jensen's Alpha** (`Actual Return − [Risk-free + Beta × (Market Return − Risk-free)]`) — manager skill beyond market exposure
+3. **Consistency** — % of rolling 3-year windows where the fund beat its category average
 
-Percentile-rank normalization (Morningstar-style: "beats X% of peers on this metric") is robust to outliers and easy to explain. **User-configurable weights** apply across these three dimensions — this is where the original "give weight based on preference" idea actually lands well, since the three inputs are largely independent.
-
-Rank within each category; output top N per category plus full ranked list.
-
-## Data Sources
-- **Scheme list, categories & AUM:** [InertExpert2911/Mutual_Fund_Data](https://github.com/InertExpert2911/Mutual_Fund_Data) (AMFI-derived, per-plan Average AUM)
-- **Historical NAV (for returns/Beta/Sharpe/Alpha):** `mfapi.in` (free, mirrors AMFI data)
-- **Benchmark (NIFTY 50, for Beta/Alpha):** `yfinance` (`^NSEI`)
-
-## Pipeline
-```
-src/
-  fetch_schemes.py     # scheme list + category classification (184 funds, 10 categories)
-  fetch_nav_history.py # historical NAV per scheme, cached to data/raw/nav_history/
-  fetch_benchmark.py   # NIFTY 50 history, cached to data/raw/nifty50.csv
-  metrics.py            # returns (CAGR), Beta, Sharpe, Jensen's Alpha, Consistency
-  scoring.py            # eligibility filter + weighted composite score + ranking
-  report.py             # multi-sheet Excel output -> output/fund_rankings.xlsx
-  main.py               # pipeline entrypoint - runs all steps in order
-```
-
-Run the whole pipeline with `python src/main.py` (from the project root). Fetch steps are skipped if their cached output already exists.
+Percentile-rank normalisation (Morningstar-style) is robust to outliers. Weights across the three dimensions are user-configurable.
 
 ## Dashboard
-An interactive Streamlit dashboard (`dashboard/app.py`) sits on top of the Stage 1 eligible funds:
-- **Investor style presets** — pick Balanced, Safety First, Return Seeker, or Risk-Adjusted to instantly reweight the ranking without knowing what Sharpe or Alpha numbers mean. Custom mode exposes individual sliders with plain-English tooltips.
-- **Top-pick banner** — headline metrics for the #1 fund in the selected category.
-- **Ranked table** — all eligible funds sorted by composite score; top 3 highlighted.
-- **Horizontal bar chart** (Plotly) — composite scores with top-3 in green.
-- **Radar / spider chart** — head-to-head comparison of the top 3 funds across Sharpe, Alpha, and Consistency percentile ranks.
 
-Run with:
+**[Open Live Dashboard](https://mutual-fund-analytics-nrcwcuthktrxzca5golsnn.streamlit.app/)**
+
+- Pick a fund category and investor style preset (Balanced / Safety First / Return Seeker / Risk-Adjusted)
+- Rankings recompute live as you adjust weights
+- Top-pick banner, ranked table with top-3 highlighted, bar chart, and radar chart for head-to-head top-3 comparison
+
+## Data Sources
+- **Scheme list, categories & AUM:** [InertExpert2911/Mutual_Fund_Data](https://github.com/InertExpert2911/Mutual_Fund_Data) (AMFI-derived)
+- **Historical NAV:** `mfapi.in` (free AMFI mirror, daily NAV per scheme)
+- **Benchmark (NIFTY 50):** `yfinance` (`^NSEI`)
+
+## Pipeline
+
 ```
+src/
+  fetch_raw_data.py    # downloads scheme/AUM data from GitHub
+  fetch_schemes.py     # builds scheme universe (184 funds, 10 categories)
+  fetch_nav_history.py # fetches full NAV history per scheme, cached locally
+  fetch_benchmark.py   # downloads NIFTY 50 history via yfinance
+  metrics.py           # computes CAGR, Beta, Sharpe, Jensen's Alpha, Consistency
+  scoring.py           # eligibility filter + composite score + category ranking
+  report.py            # writes output/fund_rankings.xlsx (multi-sheet, formatted)
+  main.py              # pipeline entrypoint — runs all steps in order
+```
+
+Run everything with one command (from the project root):
+```
+python src/main.py
+```
+Fetch steps are skipped automatically if cached data already exists.
+
+## Run the Dashboard Locally
+
+```
+pip install -r requirements.txt
 streamlit run dashboard/app.py
 ```
-(from the project root — `data/processed/schemes.csv` and `metrics.csv` must already exist, i.e. the pipeline must have been run at least once).
 
 ## Assumptions
-- **Risk-free rate**: 7% (proxy for India 10Y G-Sec yield), used for Sharpe/Alpha.
-- **Beta/Sharpe/Alpha window**: trailing 3 years of daily returns vs NIFTY 50.
-- **Eligibility (Stage 1)**: AUM >= ₹1,000cr (liquidity/stability gate - the original ₹10,000cr would have zeroed out smaller categories like Dividend Yield) and 5-year+ track record.
+- **Risk-free rate:** 7% (India 10Y G-Sec proxy) for Sharpe and Alpha
+- **Lookback window:** Trailing 3 years of daily returns vs NIFTY 50 for Beta / Sharpe / Alpha
+- **Eligibility:** AUM ≥ ₹1,000 Cr and 5-year track record
 
-## Results (current)
-93 of 184 funds pass eligibility. Every category retains at least 3 eligible funds (Multi Cap is the tightest at 4, due to SEBI's 2020 category redefinition creating mostly newer funds in that category). See `data/processed/scored_funds.csv` for the full ranked list.
-
-## Status
-**Pipeline complete and working end-to-end** (`python src/main.py` -> `output/fund_rankings.xlsx`), fully self-contained (no manual downloads). See [PROJECTS.md](C:\Users\VEER\.claude\PROJECTS.md) for overall tracker.
+## Results
+93 of 184 funds pass eligibility across 10 categories. Every category has at least 3 eligible funds. Multi Cap is the tightest (4 eligible) — most funds in that category were restructured after SEBI's 2020 category redefinition, resetting their track records.
 
 ---
 
