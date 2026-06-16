@@ -56,8 +56,11 @@ Run the whole pipeline with `python src/main.py` (from the project root). Fetch 
 
 ## Dashboard
 An interactive Streamlit dashboard (`dashboard/app.py`) sits on top of the Stage 1 eligible funds:
-- Pick a category and see its ranked table + a bar chart of composite scores, with the top 3 highlighted (same logic as the Excel report).
-- Adjust the Sharpe / Jensen's Alpha / Consistency weight sliders to see rankings recompute live, reusing `compute_composite_score()` from `src/scoring.py` (no duplicated logic).
+- **Investor style presets** — pick Balanced, Safety First, Return Seeker, or Risk-Adjusted to instantly reweight the ranking without knowing what Sharpe or Alpha numbers mean. Custom mode exposes individual sliders with plain-English tooltips.
+- **Top-pick banner** — headline metrics for the #1 fund in the selected category.
+- **Ranked table** — all eligible funds sorted by composite score; top 3 highlighted.
+- **Horizontal bar chart** (Plotly) — composite scores with top-3 in green.
+- **Radar / spider chart** — head-to-head comparison of the top 3 funds across Sharpe, Alpha, and Consistency percentile ranks.
 
 Run with:
 ```
