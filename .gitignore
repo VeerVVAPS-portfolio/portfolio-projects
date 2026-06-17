@@ -3,6 +3,10 @@ __pycache__/
 .venv/
 venv/
 
+# Secret keys — NEVER commit these
+.env
+*.env
+
 # Raw data — large, auto-downloaded by the pipeline
 projects/01-mutual-fund-analytics-automation/data/raw/
 
