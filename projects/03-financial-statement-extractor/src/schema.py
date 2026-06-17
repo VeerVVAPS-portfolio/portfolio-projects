@@ -1,0 +1,372 @@
+"""
+schema.py
+Standard line items and keyword synonym maps for P&L, Balance Sheet, Cash Flow.
+"""
+
+from __future__ import annotations
+
+# ── Standard line items (display order) ──────────────────────────────────────
+
+PNL_ITEMS = [
+    "Revenue",
+    "Cost of Revenue",
+    "Gross Profit",
+    "Other Operating Expenses",
+    "EBITDA",
+    "Depreciation & Amortization",
+    "EBIT",
+    "Interest Expense",
+    "Other Income / Expense",
+    "Profit Before Tax",
+    "Tax",
+    "Net Profit",
+    "EPS (Basic)",
+]
+
+BS_ITEMS = [
+    "Cash & Equivalents",
+    "Inventories",
+    "Trade Receivables",
+    "Other Current Assets",
+    "Current Assets",
+    "Property, Plant & Equipment",
+    "Goodwill & Intangibles",
+    "Other Non-Current Assets",
+    "Non-Current Assets",
+    "Total Assets",
+    "Trade Payables",
+    "Short-term Borrowings",
+    "Other Current Liabilities",
+    "Current Liabilities",
+    "Long-term Borrowings",
+    "Other Non-Current Liabilities",
+    "Non-Current Liabilities",
+    "Total Liabilities",
+    "Share Capital",
+    "Retained Earnings / Reserves",
+    "Total Equity",
+]
+
+CF_ITEMS = [
+    "Operating Cash Flow",
+    "Investing Cash Flow",
+    "Financing Cash Flow",
+    "Net Change in Cash",
+    "Opening Cash Balance",
+    "Closing Cash Balance",
+]
+
+# ── Keyword synonyms for row label matching ───────────────────────────────────
+# Each key is the standard label; values are substrings to match (lowercase).
+
+PNL_SYNONYMS: dict[str, list[str]] = {
+    "Revenue": [
+        "revenue from operations",
+        "net revenue",
+        "total revenue",
+        "net sales",
+        "total income from operations",
+        "revenue from contract",
+        "gross revenue",
+        "total net revenue",
+        "sales and services",
+        "income from operations",
+    ],
+    "Cost of Revenue": [
+        "cost of goods sold",
+        "cost of revenue",
+        "cost of sales",
+        "cost of materials",
+        "cost of products",
+        "direct costs",
+        "cost of services",
+        "purchases of stock-in-trade",
+    ],
+    "Gross Profit": [
+        "gross profit",
+        "gross margin",
+    ],
+    "Other Operating Expenses": [
+        "selling general and administrative",
+        "sg&a",
+        "operating expenses",
+        "employee benefit",
+        "staff costs",
+        "selling and distribution",
+        "research and development",
+        "r&d",
+    ],
+    "EBITDA": [
+        "ebitda",
+        "earnings before interest tax depreciation",
+    ],
+    "Depreciation & Amortization": [
+        "depreciation",
+        "amortization",
+        "depreciation and amortization",
+        "d&a",
+    ],
+    "EBIT": [
+        "ebit",
+        "operating profit",
+        "profit from operations",
+        "earnings before interest and tax",
+        "income from operations",
+    ],
+    "Interest Expense": [
+        "interest expense",
+        "finance costs",
+        "finance cost",
+        "interest cost",
+        "interest charges",
+        "borrowing costs",
+        "interest on borrowings",
+    ],
+    "Other Income / Expense": [
+        "other income",
+        "other expense",
+        "exceptional items",
+        "extraordinary items",
+        "non-operating",
+    ],
+    "Profit Before Tax": [
+        "profit before tax",
+        "income before tax",
+        "earnings before tax",
+        "pbt",
+        "profit/(loss) before tax",
+        "profit before income tax",
+        "income before income taxes",
+        "profit before exceptional",
+    ],
+    "Tax": [
+        "tax expense",
+        "income tax expense",
+        "income tax",
+        "provision for tax",
+        "current tax",
+        "total tax expense",
+        "tax on income",
+    ],
+    "Net Profit": [
+        "net profit",
+        "profit after tax",
+        "net income",
+        "profit for the year",
+        "profit/(loss) for",
+        "pat",
+        "net earnings",
+        "profit for the period",
+        "total profit for the year",
+    ],
+    "EPS (Basic)": [
+        "basic earnings per share",
+        "basic eps",
+        "earnings per equity share",
+        "earnings per share - basic",
+        "basic net earnings per share",
+    ],
+}
+
+BS_SYNONYMS: dict[str, list[str]] = {
+    "Cash & Equivalents": [
+        "cash and cash equivalents",
+        "cash and bank",
+        "cash equivalents",
+        "bank balances",
+    ],
+    "Inventories": [
+        "inventories",
+        "inventory",
+        "stock-in-trade",
+        "raw materials",
+    ],
+    "Trade Receivables": [
+        "trade receivables",
+        "accounts receivable",
+        "debtors",
+        "trade and other receivables",
+    ],
+    "Other Current Assets": [
+        "other current assets",
+        "prepaid",
+        "advance",
+        "short-term loans",
+    ],
+    "Current Assets": [
+        "total current assets",
+        "current assets",
+    ],
+    "Property, Plant & Equipment": [
+        "property, plant and equipment",     # with comma (standard Indian AR format)
+        "property plant and equipment",      # without comma (US/other formats)
+        "ppe",
+        "tangible assets",
+        "fixed assets",
+        "right-of-use",
+    ],
+    "Goodwill & Intangibles": [
+        "goodwill",
+        "intangible assets",
+        "intangibles",
+    ],
+    "Other Non-Current Assets": [
+        "other non-current assets",
+        "long-term investments",
+        "deferred tax assets",
+        "capital work-in-progress",
+    ],
+    "Non-Current Assets": [
+        "total non-current assets",
+        "non-current assets",
+    ],
+    "Total Assets": [
+        "total assets",
+        "total equity and liabilities",
+        "total non-current assets and current assets",
+    ],
+    "Current Assets": [
+        "total current assets",
+        # "current assets" removed — it's a substring of "non-current assets"
+        # and would cause false matches on non-current asset line items.
+    ],
+    "Trade Payables": [
+        "trade payables",
+        "accounts payable",
+        "creditors",
+        "trade and other payables",
+    ],
+    "Short-term Borrowings": [
+        "short-term borrowings",
+        "current portion of long-term",
+        "short term debt",
+    ],
+    "Other Current Liabilities": [
+        "other current liabilities",
+        "accrued liabilities",
+        "provisions",
+        "current tax liabilities",
+    ],
+    "Current Liabilities": [
+        "total current liabilities",
+        # "current liabilities" removed — substring of "non-current liabilities".
+    ],
+    "Long-term Borrowings": [
+        "long-term borrowings",
+        "long term debt",
+        "non-current borrowings",
+        "long-term debt",
+    ],
+    "Other Non-Current Liabilities": [
+        "other non-current liabilities",
+        "deferred tax liabilities",
+        "long-term provisions",
+    ],
+    "Non-Current Liabilities": [
+        "total non-current liabilities",
+        "non-current liabilities",
+    ],
+    "Total Liabilities": [
+        "total liabilities",
+    ],
+    "Share Capital": [
+        "share capital",
+        "common stock",
+        "equity share capital",
+        "paid-up capital",
+    ],
+    "Retained Earnings / Reserves": [
+        "retained earnings",
+        "reserves and surplus",
+        "other equity",
+        "accumulated deficit",
+        "other comprehensive income",
+    ],
+    "Total Equity": [
+        "total equity",
+        "shareholders equity",
+        "stockholders equity",
+        "total shareholders",
+        "net worth",
+    ],
+}
+
+CF_SYNONYMS: dict[str, list[str]] = {
+    "Operating Cash Flow": [
+        "net cash generated from operating",
+        "net cash generated by operating",   # Infosys phrasing: "by" not "from"
+        "net cash from operating",
+        "net cash used in operating",
+        "cash generated from operating",
+        "cash from operations",
+        "net cash provided by operating",
+        "net cash inflow from operating",
+        "operating activities",              # broad fallback — safe with skip-None fix
+    ],
+    "Investing Cash Flow": [
+        "net cash generated from investing",
+        "net cash used in investing",
+        "net cash from investing",
+        "cash used in investing",
+        "net cash inflow from investing",
+        "investing activities",              # catches "used in from investing" PDF artifact
+    ],
+    "Financing Cash Flow": [
+        "net cash generated from financing",
+        "net cash used in financing",
+        "net cash from financing",
+        "cash from financing",
+        "net cash inflow from financing",
+        "financing activities",
+    ],
+    "Net Change in Cash": [
+        "net increase",
+        "net decrease",
+        "net change in cash",
+        "increase in cash",
+        "decrease in cash",
+        "net increase/(decrease)",
+    ],
+    "Opening Cash Balance": [
+        "opening cash",
+        "cash at beginning",
+        "cash and cash equivalents at the beginning",
+        "cash and cash equivalents at beginning",
+        "balance at beginning",
+        "at the beginning of the year",
+    ],
+    "Closing Cash Balance": [
+        "closing cash",
+        "cash at end",
+        "cash and cash equivalents at the end",
+        "cash and cash equivalents at end",
+        "balance at end",
+        "at the end of the year",
+    ],
+}
+
+# ── Page search keywords (used to locate statement pages in PDF) ──────────────
+
+PAGE_KEYWORDS = {
+    "pnl": [
+        "statement of profit and loss",
+        "profit and loss account",
+        "income statement",
+        "statement of operations",
+        "statement of income",
+        "consolidated statement of profit",
+        "standalone statement of profit",
+    ],
+    "bs": [
+        "balance sheet",
+        "statement of financial position",
+        "consolidated balance sheet",
+        "standalone balance sheet",
+    ],
+    "cf": [
+        "cash flow statement",
+        "statement of cash flows",
+        "consolidated cash flow",
+        "standalone cash flow",
+    ],
+}
