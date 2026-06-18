@@ -28,14 +28,16 @@ streamlit run dashboard/app.py
 
 ## Tested Against
 
-Validated against 6 Indian companies across 5 sectors: Infosys, TCS, Maruti Suzuki, Asian Paints, Dr. Reddy's, and Page Industries. P&L and Balance Sheet extraction reconciles exactly (Assets = Liabilities + Equity) for all of these. Cash Flow reconciles for 4 of 6.
+Validated against 9 Indian companies across 6 sectors: Infosys, TCS, Maruti Suzuki, Asian Paints, Dr. Reddy's, Page Industries, and three banks (HDFC Bank, ICICI Bank, Kotak Mahindra Bank). P&L and Balance Sheet extraction reconciles exactly (Assets = Liabilities + Equity, or Total Capital and Liabilities = Total Assets for banks) for all 9. Cash Flow reconciles for 8 of 9.
+
+Banks use a completely different statement structure (Banking Regulation Act format — Capital/Deposits/Advances instead of Trade Receivables/Inventories, no Current/Non-Current split) and are detected automatically and routed to a separate schema.
 
 ## Limitations
 
 - Works with **text-based PDFs** only (not scanned/image PDFs)
-- **Banks and financial conglomerates are not supported** — confirmed on HDFC Bank, where the report's size and an embedded insurance subsidiary make "Balance Sheet" / "Profit and Loss" / "Cash Flow" turn up too often in unrelated prose for page-finding to work reliably
 - Complex merged-cell tables may partially extract — always verify numbers against the source
-- Works best with Indian company annual reports (Ind AS format)
+- Works best with Indian company annual reports (Ind AS / Banking Regulation Act format)
+- Unusual column layouts (a label column that overflows past where the value columns start) can occasionally split a label from its value — seen once, on Page Industries' Cash Flow page
 
 ## Tech Stack
 

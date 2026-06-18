@@ -268,10 +268,10 @@ Systems thinking — breaking a complex problem (PDF → structured data) into d
 The page-locating scan took 157 seconds on a 369-page annual report because I was using pdfplumber's `extract_text()` for every page — a method optimized for accurate character-level layout reconstruction, which is expensive and unnecessary when you just need to check for heading keywords. Switched to PyMuPDF for that scan (50x faster), then added a cheap pre-filter pass (plain substring search) to cut the number of pages needing the more expensive sorted-text extraction from 369 to ~70. Final time: ~9 seconds. The lesson: profile before optimizing, and match the tool's cost to what the task actually needs — don't use a precision instrument for a coarse filter.
 
 **Q: What are known limitations of the current extraction?**
-Five, in order of how often they bite: (1) When a company breaks a line item into sub-components with no parent total (e.g. TCS shows "Trade receivables" as a bare header with "Billed"/"Unbilled" as the children), only the first matching sub-item is captured — one line per category, not a sum. (2) "Tax" captures current tax only; deferred tax shows separately under "Other". (3) Banks and financial conglomerates aren't supported — confirmed on HDFC Bank, where even page-finding fails because their reports are large enough (585 pages, plus an insurance subsidiary) that statement names turn up constantly in unrelated prose. (4) Unusual column layouts can split a label column from its values at a boundary the two-column model doesn't expect (Page Industries' Cash Flow page). (5) Scanned PDFs need OCR — out of scope for this portfolio version.
+Four, in order of how often they bite: (1) When a company breaks a line item into sub-components with no parent total (e.g. TCS shows "Trade receivables" as a bare header with "Billed"/"Unbilled" as the children), only the first matching sub-item is captured — one line per category, not a sum. (2) "Tax" captures current tax only; deferred tax shows separately under "Other". (3) Unusual column layouts can split a label column from its values at a boundary the two-column model doesn't expect (Page Industries' Cash Flow page). (4) Scanned PDFs need OCR — out of scope for this portfolio version.
 
 **Q: Does this work on annual reports from companies other than Infosys?**
-Tested against 6 companies spanning 5 sectors and 2 market-cap tiers: Infosys and TCS (IT services), Maruti Suzuki (auto manufacturing), Asian Paints (FMCG/paints), HDFC Bank (banking), Dr. Reddy's (pharma), and Page Industries (apparel, mid-cap). Results:
+Tested against 9 companies spanning 6 sectors and 2 market-cap tiers: Infosys and TCS (IT services), Maruti Suzuki (auto manufacturing), Asian Paints (FMCG/paints), Dr. Reddy's (pharma), Page Industries (apparel, mid-cap), and three banks — HDFC, ICICI, and Kotak Mahindra. Results:
 
 | Company | Sector | P&L | Balance Sheet | Cash Flow |
 |---|---|---|---|---|
@@ -280,23 +280,20 @@ Tested against 6 companies spanning 5 sectors and 2 market-cap tiers: Infosys an
 | Maruti Suzuki | Auto manufacturing | ✓ | ✓ balances | ✓ reconciles |
 | Asian Paints | FMCG/paints | ✓ | ✓ balances | ✓ reconciles |
 | Dr. Reddy's | Pharma | ✓ | ✓ balances | ✓ reconciles (~16 Cr forex gap) |
+| HDFC Bank | Banking | ✓ | ✓ balances | ✓ reconciles |
+| ICICI Bank | Banking | ✓ | ✓ balances | ~ (5/6 — one value/label split across lines) |
+| Kotak Mahindra Bank | Banking | ✓ | ✓ balances | ✓ reconciles |
 | Page Industries | Apparel, mid-cap | ✓ | ✓ balances | ✗ — wide-label layout splits label/value columns at an unexpected boundary |
-| HDFC Bank | Banking + insurance | ✗ | ✗ | ✗ — page-finding itself fails |
 
-4/6 fully reconcile end to end; a 5th (Page Industries) gets P&L and Balance Sheet right but not Cash Flow. Only the bank failed comprehensively — confirming the original risk assessment that banks need fundamentally different schema/heuristics (Advances/Deposits instead of Trade Receivables/Payables), not just new synonyms.
+8 of 9 fully reconcile end to end. Banks were the one category flagged up front as high-risk ("different schema entirely — Advances/Deposits, not Trade Receivables/Payables") — and they did need real new work, not a tweak: a parallel `BANK_*` schema for the Banking Regulation Act format, section-position tracking to disambiguate the bare "Total" label banks use for both subtotals, and several more pdfplumber-corruption and heading-false-positive fixes. All three banks tested now reconcile.
 
-**The real lesson from this round: most bugs weren't wrong synonyms, they were "this looks like a heading but isn't."** Annual reports are full of sentences that incidentally contain statement names:
-- Auditor's reports describing what they audited ("comprise the Standalone Balance Sheet as at...")
-- Notes about "on-balance sheet exposures" (securitisation, a banking-specific note)
-- CEO/CFO compliance certificates declaring "we have reviewed... the cash flow statement"
-- Notes sections with company-specific names: "Schedules to the..." (HDFC), "Explanatory notes to..." (Page Industries) — neither matched the generic "Notes to the..." exclusion
-- A note sentence ("...as at balance sheet date") scoring as a real heading purely on line length
+**The recurring lesson across this whole round: most bugs weren't wrong synonyms, they were "this looks like a heading but isn't," or "this looks like a table but the columns are scrambled."** Annual reports are full of sentences that incidentally contain statement names, and pdfplumber has more failure modes than expected:
 
-Each fix added a targeted exclusion (a phrase list, a position check, a "does this page's own header announce it's Notes/Schedules/a Compliance Certificate" pre-check) rather than a blanket rule — false-positive elimination this specific doesn't generalize from one rule; it has to be discovered company by company.
+*Heading false positives* — auditor's reports describing what they audited ("comprise the Standalone Balance Sheet as at..."), notes about "on-balance sheet exposures" (a banking-specific securitisation note), CEO/CFO compliance certificates declaring "we have reviewed... the cash flow statement", company-specific Notes-section names ("Schedules to the..." / "Schedules forming part of..." / "Explanatory notes to..." — three different euphemisms for the same thing across three companies), a combined section title naming two statements at once outscoring the real, simpler heading, and even a statement's own title rendered **letter-spaced** in the PDF's text layer ("S TA N D A L O N E B A L A N C E S H E E T") so it never matched a plain substring check at all.
 
-**Two structural bugs also needed real architecture, not synonyms:**
-- pdfplumber's `extract_tables()` has at least 3 distinct corruption modes across companies tested: duplicated cell values (Infosys), an entire column's values merged into one cell (TCS), and all labels merged into one cell with an empty value cell (TCS's Cash Flow page). All three needed detection heuristics that fall back to text-based parsing.
-- Some reports run two statements side by side on one physical page (Maruti: Balance Sheet + P&L share a page, each in a half-width column). Page references became `(page_index, column)` tuples, and pdfplumber's table extraction had to be skipped entirely for cropped half-pages (it dropped the label column under cropping) in favor of the text fallback.
+*pdfplumber table corruption* — six distinct modes found across 9 companies: duplicated cell values (Infosys), an entire column merged into one cell (TCS), all labels merged into one cell with an empty value (TCS), a blank label column (HDFC), a schedule-reference NUMBER where the label should be (ICICI), and — most severe — only one cell surviving per row at all, no label and no second year (Kotak). Each needed its own detector and a shared fallback to text-based parsing.
+
+Each fix added a targeted exclusion or detector rather than a blanket rule — none of this generalizes from first principles; it has to be discovered company by company, which is exactly why testing broadly before calling something "done" matters.
 
 **Verified extraction results (Infosys AR 2025):**
 | Metric | Extracted | Correct |
