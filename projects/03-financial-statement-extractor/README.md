@@ -4,9 +4,9 @@ Extracts P&L, Balance Sheet, and Cash Flow statements from annual report PDFs an
 
 ## What It Does
 
-1. Upload 1–5 annual report PDFs (one per financial year)
-2. The tool automatically finds the financial statement pages
-3. Tables are extracted using `pdfplumber` and normalized to a standard schema
+1. Upload 1–5 annual report PDFs (one per financial year — name files with the full 4-digit year, e.g. `infosys-ar-2025.pdf`, so the year is detected correctly)
+2. The tool automatically finds the financial statement pages (PyMuPDF scans the full document fast; pdfplumber extracts the actual tables on just those pages)
+3. Tables are extracted and normalized to a standard schema
 4. A 4-sheet Excel is generated: P&L · Balance Sheet · Cash Flow · Ratios
 
 ## Ratios Calculated Automatically
@@ -34,7 +34,7 @@ streamlit run dashboard/app.py
 
 ## Tech Stack
 
-- Python · Streamlit · pdfplumber · pandas · openpyxl
+- Python · Streamlit · PyMuPDF · pdfplumber · pandas · openpyxl
 
 ---
 

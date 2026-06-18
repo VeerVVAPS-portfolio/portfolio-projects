@@ -213,6 +213,9 @@ Financial statements span 2–3 pages. Original code picked the single "best" ta
 **Problem 4 — Continuation pages**
 CF statement best-match was page 283 "(contd.)" — missing the operating activities section which started on page 282. Fixed by checking if the best page contains "(contd.)" in its first 200 characters; if so, also include the previous page.
 
+**Problem 5 — 157-second page scan (the big one)**
+Scanning the full 369-page PDF with pdfplumber's `extract_text()` to locate the three statement pages took 157 seconds — the Streamlit app appeared to hang. Profiling showed pdfplumber's layout analysis (character-level positioning, used for accurate table extraction) is overkill for a scan that only needs heading keywords and number counts. Switched to PyMuPDF (`fitz`) for this scan — same task in ~3 seconds, a ~50x speedup — while keeping pdfplumber for the actual table extraction on the small number of pages identified (where its table-structure accuracy matters). Added a second optimization: a cheap unsorted text pass filters 369 pages down to ~70 "candidate" pages (containing any statement keyword), and only those get the more expensive `sort=True` extraction needed for reliable heading detection. Final scan time: ~9 seconds. This is a "right tool for each sub-task" decision — fast+rough for the wide scan, slow+accurate for the narrow extraction.
+
 ---
 
 ### The Synonym Map — Domain Knowledge as Code
@@ -260,6 +263,9 @@ Three things: (1) Switch table extraction to AWS Textract or Google Document AI 
 
 **Q: What does this project demonstrate?**
 Systems thinking — breaking a complex problem (PDF → structured data) into discrete, testable steps. Domain knowledge encoding. Iterative debugging on real data. And the judgment to know when rule-based systems are better than AI.
+
+**Q: Tell me about a performance problem you solved.**
+The page-locating scan took 157 seconds on a 369-page annual report because I was using pdfplumber's `extract_text()` for every page — a method optimized for accurate character-level layout reconstruction, which is expensive and unnecessary when you just need to check for heading keywords. Switched to PyMuPDF for that scan (50x faster), then added a cheap pre-filter pass (plain substring search) to cut the number of pages needing the more expensive sorted-text extraction from 369 to ~70. Final time: ~9 seconds. The lesson: profile before optimizing, and match the tool's cost to what the task actually needs — don't use a precision instrument for a coarse filter.
 
 **Q: What are known limitations of the current extraction?**
 Two: (1) Numbers < ₹1,000 Cr aren't comma-formatted in Indian notation, so they're missed by the regex. Infosys's Finance Cost (₹416 Cr) falls in this bucket — Interest Coverage ratio shows "—". (2) Scanned PDFs need OCR. Both are fixable with AWS Textract, but out of scope for this portfolio version.

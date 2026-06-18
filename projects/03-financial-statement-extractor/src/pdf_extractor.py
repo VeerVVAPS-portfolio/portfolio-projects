@@ -1,6 +1,14 @@
 """
 pdf_extractor.py
-Uses pdfplumber to find financial statement pages and extract raw tables.
+Finds financial statement pages and extracts raw tables.
+
+Two libraries, two jobs:
+- PyMuPDF (fitz): fast plain-text extraction, used to scan every page of the
+  document (can be 300+ pages) to locate P&L/BS/CF. ~50x faster than
+  pdfplumber for this — pdfplumber's layout analysis is overkill for a page
+  scoring pass that only needs heading keywords and number counts.
+- pdfplumber: used only on the small set of pages found above, for its
+  superior table-structure extraction.
 """
 
 from __future__ import annotations
@@ -10,6 +18,7 @@ import re
 from collections import defaultdict
 from typing import BinaryIO
 
+import fitz  # PyMuPDF
 import pdfplumber
 
 # ── More specific page keywords ───────────────────────────────────────────────
@@ -116,57 +125,82 @@ def find_statement_pages(pdf_file: bytes | BinaryIO) -> dict[str, list[int]]:
     Only accepts pages where the keyword appears as a heading (not buried in body text).
     Returns {"pnl": [...], "bs": [...], "cf": [...]}
     Each list = best matched page + up to 3 following pages.
+
+    Uses PyMuPDF for text extraction (see module docstring) — on a 369-page
+    annual report a single sort=True pass over every page took 26s. Cut to
+    ~8s with a two-pass approach: a cheap unsorted scan filters ~370 pages
+    down to the ~70 that mention a statement keyword anywhere; only those
+    get the more expensive sort=True extraction needed for heading detection.
     """
-    if isinstance(pdf_file, bytes):
-        pdf_file = io.BytesIO(pdf_file)
+    pdf_bytes = pdf_file if isinstance(pdf_file, bytes) else pdf_file.read()
 
     candidates: dict[str, list[tuple[int, int]]] = {"pnl": [], "bs": [], "cf": []}
     found: dict[str, list[int]] = {"pnl": [], "bs": [], "cf": []}
 
-    with pdfplumber.open(pdf_file) as pdf:
-        total_pages = len(pdf.pages)
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    total_pages = len(doc)
 
-        for i, page in enumerate(pdf.pages):
-            text = page.extract_text() or ""
-            lines = [ln.strip() for ln in text.split("\n") if ln.strip()]
+    all_keywords = [kw for kws in _PAGE_KEYWORDS.values() for kw in kws]
+    unsorted_texts = [page.get_text() for page in doc]
 
-            for stmt_type, keywords in _PAGE_KEYWORDS.items():
-                # Must be a heading — keyword in first 10 lines as a short line
-                if not _keyword_in_heading(lines, keywords):
-                    continue
-                score = _score_page(text, lines)
-                candidates[stmt_type].append((score, i))
+    # sort=True orders text by visual top-to-bottom position rather than the
+    # PDF's internal content-stream order — without it, page titles placed in
+    # a separate text block (common in InDesign exports) can end up last.
+    # Cached lazily since most pages never need it.
+    sorted_cache: dict[int, str] = {}
 
-        for stmt_type, scored in candidates.items():
-            if not scored:
+    def get_sorted_text(idx: int) -> str:
+        if idx not in sorted_cache:
+            sorted_cache[idx] = doc[idx].get_text(sort=True)
+        return sorted_cache[idx]
+
+    candidate_pages = [
+        i for i, t in enumerate(unsorted_texts)
+        if any(kw in t.lower() for kw in all_keywords)
+    ]
+
+    for i in candidate_pages:
+        text = get_sorted_text(i)
+        lines = [ln.strip() for ln in text.split("\n") if ln.strip()]
+
+        for stmt_type, keywords in _PAGE_KEYWORDS.items():
+            # Must be a heading — keyword in first 10 lines as a short line
+            if not _keyword_in_heading(lines, keywords):
                 continue
-            best_score, best_idx = max(scored, key=lambda x: x[0])
+            score = _score_page(text, lines)
+            candidates[stmt_type].append((score, i))
 
-            # Only look back if the best page is a continuation (not the statement start)
-            best_text = (pdf.pages[best_idx].extract_text() or "").lower()
-            is_contd = any(m in best_text[:200] for m in ["(contd.)", "(continued)", "continued..."])
+    for stmt_type, scored in candidates.items():
+        if not scored:
+            continue
+        best_score, best_idx = max(scored, key=lambda x: x[0])
 
-            pages = []
-            if is_contd and best_idx > 0:
-                pages.append(best_idx - 1)
-            pages.append(best_idx)
-            for offset in (1, 2, 3):
-                next_idx = best_idx + offset
-                if next_idx >= total_pages:
-                    break
-                next_text = pdf.pages[next_idx].extract_text() or ""
-                next_lines = [ln.strip() for ln in next_text.split('\n') if ln.strip()]
-                # Stop if the next page opens a DIFFERENT type of financial statement.
-                # This prevents consolidated + standalone versions from being merged.
-                is_new_statement = any(
-                    other_type != stmt_type and _keyword_in_heading(next_lines, other_kws)
-                    for other_type, other_kws in _PAGE_KEYWORDS.items()
-                )
-                if is_new_statement:
-                    break
-                pages.append(next_idx)
-            found[stmt_type] = pages
+        # Only look back if the best page is a continuation (not the statement start)
+        best_text = get_sorted_text(best_idx).lower()
+        is_contd = any(m in best_text[:200] for m in ["(contd.)", "(continued)", "continued..."])
 
+        pages = []
+        if is_contd and best_idx > 0:
+            pages.append(best_idx - 1)
+        pages.append(best_idx)
+        for offset in (1, 2, 3):
+            next_idx = best_idx + offset
+            if next_idx >= total_pages:
+                break
+            next_text = get_sorted_text(next_idx)
+            next_lines = [ln.strip() for ln in next_text.split('\n') if ln.strip()]
+            # Stop if the next page opens a DIFFERENT type of financial statement.
+            # This prevents consolidated + standalone versions from being merged.
+            is_new_statement = any(
+                other_type != stmt_type and _keyword_in_heading(next_lines, other_kws)
+                for other_type, other_kws in _PAGE_KEYWORDS.items()
+            )
+            if is_new_statement:
+                break
+            pages.append(next_idx)
+        found[stmt_type] = pages
+
+    doc.close()
     return found
 
 
