@@ -308,6 +308,7 @@ CF_SYNONYMS: dict[str, list[str]] = {
         "net cash flows from operating",
         "net cash flows used in operating",
         "net cash flow from/(used in) operating",  # ICICI's exact phrasing
+        "net cash flow from/ (used in) operating", # Kotak: space after the slash
         "net cash flow used in operating",
         # Deliberately NOT matching bare "operating activities" or "cash
         # generated from operating" (without "net"): Indian CF statements

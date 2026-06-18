@@ -91,6 +91,17 @@ _HEADING_FALSE_POSITIVES = [
     "off balance sheet",
 ]
 
+# One representative phrase per statement type, used to detect a COMBINED
+# section title that names more than one statement — e.g. Kotak Mahindra
+# Bank's running header "Consolidated Balance Sheet and Profit and Loss
+# Account" (a navigation label for the whole Financial Statements section,
+# not the Balance Sheet's own heading). A line naming 2+ of these is a
+# section-level title, not a single statement's heading, regardless of
+# position/length — and rejecting it matters because such a combined-title
+# page can score HIGHER than the real, simpler heading (more numbers
+# visible from data on the page) and win the page-selection.
+_STATEMENT_TYPE_SIGNALS = ["balance sheet", "profit and loss", "cash flow"]
+
 
 def _keyword_in_heading(lines: list[str], keywords: list[str]) -> bool:
     """
@@ -108,6 +119,8 @@ def _keyword_in_heading(lines: list[str], keywords: list[str]) -> bool:
         if len(line_lower) < 5:
             continue
         if any(fp in line_lower for fp in _HEADING_FALSE_POSITIVES):
+            continue
+        if sum(sig in line_lower for sig in _STATEMENT_TYPE_SIGNALS) >= 2:
             continue
         # Auditor's reports enumerate findings as "(a) ...", "(b) ...", and
         # routinely name all three statements in one sentence — e.g.
@@ -151,6 +164,18 @@ def _score_page(text: str, lines: list[str]) -> int:
 
     # "Particulars" is the standard first-column header in Indian financial statements
     if "particulars" in text_lower:
+        score += 25
+
+    # Bank statements use "Schedule" instead of "Particulars" as the
+    # first-column header, so they don't get the bonus above. "Capital and
+    # Liabilities" / "Interest Earned"+"Interest Expended" are strong,
+    # distinctive markers of the REAL regulatory-format Balance Sheet/P&L —
+    # added because an MD&A summary table titled just "Balance Sheet" (with
+    # narrative composition breakdowns, not the actual statement) was
+    # outscoring the real one on number-count alone.
+    if "capital and liabilities" in text_lower:
+        score += 25
+    if "interest earned" in text_lower and "interest expended" in text_lower:
         score += 25
 
     # Number count (thousands-formatted numbers like 1,62,990)
@@ -445,6 +470,28 @@ def _has_blank_label_artifacts(tables: list[list[list[str]]]) -> bool:
     return False
 
 
+def _has_single_column_artifacts(tables: list[list[list[str]]]) -> bool:
+    """
+    Detect a sixth corruption mode (seen on Kotak Mahindra Bank's P&L):
+    pdfplumber drops BOTH the label column and one of the two value columns,
+    keeping only a single numeric cell per row — e.g. ['656,688,252'] with
+    no label and no second year's figure at all. More severe than the
+    blank-label case (#4), where at least the value columns survived intact.
+    Symptom: most data rows have exactly one cell, and it's numeric.
+    """
+    for table in tables:
+        if len(table) < 4:
+            continue
+        data_rows = table[1:]
+        single_numeric_cell = sum(
+            1 for row in data_rows
+            if row and len(row) == 1 and _parse_number_loose(row[0]) is not None
+        )
+        if data_rows and single_numeric_cell / len(data_rows) > 0.5:
+            return True
+    return False
+
+
 def _parse_number_loose(cell: str) -> float | None:
     if not cell:
         return None
@@ -502,6 +549,7 @@ def extract_tables_from_pages(
                 or _has_merged_row_artifacts(cleaned)
                 or _has_merged_label_artifacts(cleaned)
                 or _has_blank_label_artifacts(cleaned)
+                or _has_single_column_artifacts(cleaned)
             )
             if cleaned and not is_corrupted:
                 all_tables.extend(cleaned)

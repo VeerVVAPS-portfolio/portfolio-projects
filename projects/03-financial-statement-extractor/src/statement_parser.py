@@ -251,8 +251,12 @@ def normalize_table(
             continue
 
         label_key = raw_label.lower().strip()
-        if label_key in section_map:
-            current_section = label_key
+        # Strip periods before the section-map lookup: "I. INCOME" (Kotak)
+        # and "I INCOME" (HDFC) both need to resolve to the same section key
+        # rather than requiring every punctuation variant to be listed.
+        label_key_normalized = label_key.replace(".", "").strip()
+        if label_key_normalized in section_map:
+            current_section = label_key_normalized
             continue
 
         # Bank statements label BOTH section subtotals just "Total" (Total
