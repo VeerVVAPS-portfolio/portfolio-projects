@@ -410,6 +410,37 @@ def _has_merged_label_artifacts(tables: list[list[list[str]]]) -> bool:
     return False
 
 
+def _has_blank_label_artifacts(tables: list[list[list[str]]]) -> bool:
+    """
+    Detect a fourth corruption mode (seen on HDFC Bank's Balance Sheet):
+    pdfplumber misjudges the column boundary and drops the label column
+    entirely, leaving every row's first cell blank while the value columns
+    are intact. Symptom: most data rows (excluding the header row) have an
+    empty label but at least one numeric value.
+    """
+    for table in tables:
+        if len(table) < 4:
+            continue
+        data_rows = table[1:]
+        blank_with_value = sum(
+            1 for row in data_rows
+            if row and not (row[0] or "").strip()
+            and any(_parse_number_loose(c) is not None for c in row[1:])
+        )
+        if data_rows and blank_with_value / len(data_rows) > 0.5:
+            return True
+    return False
+
+
+def _parse_number_loose(cell: str) -> float | None:
+    if not cell:
+        return None
+    try:
+        return float(cell.strip().strip("()").replace(",", ""))
+    except ValueError:
+        return None
+
+
 def extract_tables_from_pages(
     pdf_file: bytes | BinaryIO,
     page_indices: list[int | tuple[int, str]],
@@ -457,6 +488,7 @@ def extract_tables_from_pages(
                 _has_duplication_artifacts(cleaned)
                 or _has_merged_row_artifacts(cleaned)
                 or _has_merged_label_artifacts(cleaned)
+                or _has_blank_label_artifacts(cleaned)
             )
             if cleaned and not is_corrupted:
                 all_tables.extend(cleaned)

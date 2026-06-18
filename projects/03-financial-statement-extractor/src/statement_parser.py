@@ -9,6 +9,10 @@ from __future__ import annotations
 import re
 
 from schema import (
+    BANK_BS_SYNONYMS,
+    BANK_FORMAT_SIGNALS,
+    BANK_PNL_SYNONYMS,
+    BANK_SECTION_MAP,
     BS_SYNONYMS,
     CF_SYNONYMS,
     PNL_SYNONYMS,
@@ -19,6 +23,24 @@ SYNONYMS_MAP = {
     "bs":  BS_SYNONYMS,
     "cf":  CF_SYNONYMS,
 }
+
+BANK_SYNONYMS_MAP = {
+    "pnl": BANK_PNL_SYNONYMS,
+    "bs":  BANK_BS_SYNONYMS,
+}
+
+
+def is_bank_statement(raw_table: list[list[str]], stmt_type: str) -> bool:
+    """
+    True if this table uses the Banking Regulation Act format (Capital and
+    Liabilities / Interest Earned and Expended) rather than the standard
+    Ind AS format. Checked once per table — CF doesn't need this, its
+    structure is similar enough across both formats.
+    """
+    if stmt_type not in BANK_FORMAT_SIGNALS:
+        return False
+    flat_text = " ".join((row[0] or "") for row in raw_table if row).lower()
+    return all(signal in flat_text for signal in BANK_FORMAT_SIGNALS[stmt_type])
 
 # ── Year detection ────────────────────────────────────────────────────────────
 
@@ -146,10 +168,10 @@ def identify_statement_table(
 
 # ── Normalisation ─────────────────────────────────────────────────────────────
 
-def _match_label(label: str, stmt_type: str) -> str | None:
+def _match_label(label: str, stmt_type: str, is_bank: bool = False) -> str | None:
     """Match a raw row label to a standard line item. Returns None if no match."""
     label_lower = label.lower()
-    synonyms = SYNONYMS_MAP[stmt_type]
+    synonyms = BANK_SYNONYMS_MAP.get(stmt_type, {}) if is_bank else SYNONYMS_MAP[stmt_type]
     for standard_label, keywords in synonyms.items():
         if any(kw in label_lower for kw in keywords):
             return standard_label
@@ -186,6 +208,12 @@ def normalize_table(
     if not raw_table:
         return {}
 
+    is_bank = is_bank_statement(raw_table, stmt_type)
+    section_map = (
+        BANK_SECTION_MAP.get(stmt_type, {}) if is_bank
+        else (_BS_SECTION_MAP if stmt_type == "bs" else {})
+    )
+
     result: dict[str, float | None] = {}
     other_counter = 1
     current_section: str | None = None
@@ -213,24 +241,35 @@ def normalize_table(
 
         if not raw_label:
             # Blank label with a value — an unlabeled subtotal row (see
-            # _BS_SECTION_MAP). Assign it to the section we're currently in.
-            if stmt_type == "bs" and current_section and value is not None:
-                standard = _BS_SECTION_MAP[current_section]
+            # _BS_SECTION_MAP, the non-bank case). Assign it to the section
+            # we're currently in.
+            if section_map and not is_bank and current_section and value is not None:
+                standard = section_map[current_section]
                 if standard not in result:
                     result[standard] = value
                 current_section = None
             continue
 
-        if stmt_type == "bs":
-            label_key = raw_label.lower().strip()
-            if label_key in _BS_SECTION_MAP:
-                current_section = label_key
+        label_key = raw_label.lower().strip()
+        if label_key in section_map:
+            current_section = label_key
+            continue
+
+        # Bank statements label BOTH section subtotals just "Total" (Total
+        # Income vs Total Expenditure; Total Capital and Liabilities vs
+        # Total Assets) — nothing in the label itself tells them apart.
+        # Resolve from the tracked section instead.
+        if is_bank and label_key == "total" and current_section:
+            standard = section_map[current_section]
+            if standard not in result and value is not None:
+                result[standard] = value
+            continue
 
         # Skip header rows (all-caps short strings, or year-like)
         if _YEAR_RE.search(raw_label) and len(raw_label) < 15:
             continue
 
-        standard = _match_label(raw_label, stmt_type)
+        standard = _match_label(raw_label, stmt_type, is_bank=is_bank)
         if standard:
             # Only record if value is non-None and key not already set.
             # Skipping None prevents section headers (no value) from blocking
@@ -256,8 +295,22 @@ def stitch_years(
     per_year_data: [(year_label, {line_item: value}), ...]
     Returns: {line_item: {year_label: value, ...}}
     """
-    from schema import PNL_ITEMS, BS_ITEMS, CF_ITEMS
-    ordered_items = {"pnl": PNL_ITEMS, "bs": BS_ITEMS, "cf": CF_ITEMS}[stmt_type]
+    from schema import PNL_ITEMS, BS_ITEMS, CF_ITEMS, BANK_PNL_ITEMS, BANK_BS_ITEMS
+    standard_items = {"pnl": PNL_ITEMS, "bs": BS_ITEMS, "cf": CF_ITEMS}[stmt_type]
+    bank_items = {"pnl": BANK_PNL_ITEMS, "bs": BANK_BS_ITEMS}.get(stmt_type)
+
+    # If any year's data used the bank schema, order by that instead — mixing
+    # bank line items into the standard ordering would scatter them after a
+    # column of blank standard rows (banks don't have Trade Receivables etc).
+    # Checked against bank-EXCLUSIVE items only ("Net Profit" and "Total
+    # Assets" exist in both lists — a plain intersection would misfire on
+    # every normal company that has either).
+    seen_items = {item for _, data in per_year_data for item in data}
+    bank_exclusive = set(bank_items) - set(standard_items) if bank_items else set()
+    if bank_exclusive and seen_items & bank_exclusive:
+        ordered_items = bank_items
+    else:
+        ordered_items = standard_items
 
     # Collect all line items seen across all years
     all_items: list[str] = list(ordered_items)  # standard items first

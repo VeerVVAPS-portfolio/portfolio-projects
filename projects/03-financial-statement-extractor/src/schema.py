@@ -384,3 +384,98 @@ PAGE_KEYWORDS = {
         "standalone cash flow",
     ],
 }
+
+# ── Bank-specific schema (Banking Regulation Act, 1949 — Third Schedule) ──────
+# Banks don't have Trade Receivables, Inventories, or a Current/Non-Current
+# split — their Balance Sheet is "Capital and Liabilities" vs "Assets" with
+# items like Deposits and Advances, and the P&L is called a "Profit and Loss
+# Account" with Income/Expenditure sections. Detected via _is_bank_statement()
+# in statement_parser.py and routed to this schema instead of the default one.
+
+BANK_PNL_ITEMS = [
+    "Interest Earned",
+    "Other Income",
+    "Total Income",
+    "Interest Expended",
+    "Operating Expenses",
+    "Provisions and Contingencies",
+    "Total Expenditure",
+    "Net Profit",
+]
+
+BANK_BS_ITEMS = [
+    "Capital",
+    "Reserves and Surplus",
+    "Deposits",
+    "Borrowings",
+    "Other Liabilities and Provisions",
+    "Total Capital and Liabilities",
+    "Cash and Balances with RBI",
+    "Balances with Banks and Money at Call",
+    "Investments",
+    "Advances",
+    "Fixed Assets",
+    "Other Assets",
+    "Total Assets",
+]
+
+BANK_PNL_SYNONYMS: dict[str, list[str]] = {
+    "Interest Earned": ["interest earned"],
+    "Other Income": ["other income"],
+    "Interest Expended": ["interest expended"],
+    "Operating Expenses": ["operating expenses"],
+    "Provisions and Contingencies": ["provisions and contingencies"],
+    "Net Profit": [
+        "net profit for the year attributable",
+        "net profit for the year",
+        "profit for the year",
+    ],
+    # "Total Income" and "Total Expenditure" deliberately have NO synonyms
+    # here — both rows are labeled just "Total" with nothing else to tell
+    # them apart. Resolved positionally via _BANK_SECTION_MAP instead (see
+    # statement_parser.py): normalize_table tracks whether it's currently
+    # under the "I INCOME" or "II EXPENDITURE" section header and assigns
+    # the next bare "Total" row accordingly.
+}
+
+BANK_BS_SYNONYMS: dict[str, list[str]] = {
+    "Capital": ["capital"],
+    "Reserves and Surplus": ["reserves and surplus"],
+    "Deposits": ["deposits"],
+    "Borrowings": ["borrowings"],
+    "Other Liabilities and Provisions": ["other liabilities and provisions"],
+    "Cash and Balances with RBI": [
+        "cash and balances with reserve bank of india",
+    ],
+    "Balances with Banks and Money at Call": [
+        "balances with banks and money at call",
+    ],
+    "Investments": ["investments"],
+    "Advances": ["advances"],
+    "Fixed Assets": ["fixed assets"],
+    "Other Assets": ["other assets"],
+    # "Total Capital and Liabilities" / "Total Assets": same situation as
+    # the P&L above — both sides of the Balance Sheet sum to a row labeled
+    # just "Total". Resolved via _BANK_SECTION_MAP.
+}
+
+# Maps a section-header line (lowercased) to the standard item that the next
+# bare "Total" row belongs to. Order matters only in that a later section
+# header overwrites the current one — rows are processed top-to-bottom.
+BANK_SECTION_MAP: dict[str, dict[str, str]] = {
+    "pnl": {
+        "i income": "Total Income",
+        "ii expenditure": "Total Expenditure",
+    },
+    "bs": {
+        "capital and liabilities": "Total Capital and Liabilities",
+        "assets": "Total Assets",
+    },
+}
+
+# Strong signals that a statement page uses the bank format, not the
+# standard one — checked against the page's raw text.
+BANK_FORMAT_SIGNALS = {
+    "pnl": ["interest earned", "interest expended"],
+    "bs": ["capital and liabilities"],
+}
