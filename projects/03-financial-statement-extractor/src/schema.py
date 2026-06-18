@@ -307,6 +307,8 @@ CF_SYNONYMS: dict[str, list[str]] = {
         "net cash flows generated from operating", # TCS: "Net cash flows generated from..."
         "net cash flows from operating",
         "net cash flows used in operating",
+        "net cash flow from/(used in) operating",  # ICICI's exact phrasing
+        "net cash flow used in operating",
         # Deliberately NOT matching bare "operating activities" or "cash
         # generated from operating" (without "net"): Indian CF statements
         # using the indirect method show a PRE-TAX subtotal first — e.g.
@@ -428,17 +430,30 @@ BANK_PNL_SYNONYMS: dict[str, list[str]] = {
     "Net Profit": [
         "net profit for the year attributable",
         "net profit for the year",
+        "net profit/(loss) for the",   # ICICI: "Net profit/(loss) for the period/year"
         "profit for the year",
     ],
-    # "Total Income" and "Total Expenditure" deliberately have NO synonyms
-    # here — both rows are labeled just "Total" with nothing else to tell
-    # them apart. Resolved positionally via _BANK_SECTION_MAP instead (see
-    # statement_parser.py): normalize_table tracks whether it's currently
-    # under the "I INCOME" or "II EXPENDITURE" section header and assigns
-    # the next bare "Total" row accordingly.
+    # Some banks label these explicitly (ICICI: "TOTAL INCOME"); others use
+    # a bare "Total" with nothing else to tell Income from Expenditure
+    # (HDFC). Explicit synonyms here catch the former; the latter is
+    # resolved positionally via BANK_SECTION_MAP in statement_parser.py,
+    # which tracks whether we're currently under "I INCOME" or
+    # "II EXPENDITURE" and assigns the next bare "Total" row accordingly.
+    "Total Income": ["total income"],
+    "Total Expenditure": ["total expenditure"],
 }
 
 BANK_BS_SYNONYMS: dict[str, list[str]] = {
+    # "Total Capital and Liabilities" / "Total Assets" MUST be checked
+    # before "Capital" — "capital" is trivially a substring of "total
+    # capital and liabilities", and _match_label returns on the first dict
+    # entry that matches, so the broader single-word synonym would win if
+    # it came first. Some banks label these totals explicitly (ICICI:
+    # "TOTAL CAPITAL AND LIABILITIES" / "TOTAL ASSETS"); others use a bare
+    # "Total" for both sides of the Balance Sheet (HDFC), resolved
+    # positionally via BANK_SECTION_MAP in statement_parser.py instead.
+    "Total Capital and Liabilities": ["total capital and liabilities"],
+    "Total Assets": ["total assets"],
     "Capital": ["capital"],
     "Reserves and Surplus": ["reserves and surplus"],
     "Deposits": ["deposits"],
@@ -454,9 +469,6 @@ BANK_BS_SYNONYMS: dict[str, list[str]] = {
     "Advances": ["advances"],
     "Fixed Assets": ["fixed assets"],
     "Other Assets": ["other assets"],
-    # "Total Capital and Liabilities" / "Total Assets": same situation as
-    # the P&L above — both sides of the Balance Sheet sum to a row labeled
-    # just "Total". Resolved via _BANK_SECTION_MAP.
 }
 
 # Maps a section-header line (lowercased) to the standard item that the next

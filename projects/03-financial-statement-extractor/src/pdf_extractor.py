@@ -61,8 +61,9 @@ _OTHER_SECTION_KEYWORDS = [
     "notes to the",
     "notes to standalone",
     "notes to consolidated",
-    "schedules to the",     # HDFC Bank's name for its Notes section
-    "explanatory notes",    # Page Industries' name for supplementary notes
+    "schedules to the",          # HDFC Bank's name for its Notes section
+    "schedules forming part",    # ICICI Bank's name for its Notes section
+    "explanatory notes",         # Page Industries' name for supplementary notes
 ]
 
 # Phrases that strongly confirm a page is the ACTUAL financial statement
@@ -255,9 +256,11 @@ def find_statement_pages(pdf_file: bytes | BinaryIO) -> dict[str, list[int]]:
         # rather than the more common "Notes to the ...").
         full_text = get_sorted_text(i, "full")
         full_lines = [ln.strip() for ln in full_text.split("\n") if ln.strip()]
-        header_zone = " ".join(full_lines[:3]).lower()
-        if ("schedules to the" in header_zone or "notes to the" in header_zone
-                or "explanatory notes" in header_zone):
+        # 5 lines, not 3: ICICI's running header splits "SCHEDULES" and
+        # "forming part of the Accounts" across a line boundary that a
+        # narrower window would miss.
+        header_zone = " ".join(full_lines[:5]).lower()
+        if any(kw in header_zone for kw in _OTHER_SECTION_KEYWORDS):
             continue
         # CEO/CFO "Compliance Certificate" (a standard SEBI corporate-
         # governance filing) declares "We have reviewed financial statements
@@ -410,24 +413,34 @@ def _has_merged_label_artifacts(tables: list[list[list[str]]]) -> bool:
     return False
 
 
+# A schedule-reference-only "label" — e.g. "1", "1A", "17 & 18" — seen on
+# ICICI Bank's Balance Sheet, where pdfplumber put the Schedule column's
+# number into the label cell instead of the real line-item text (which got
+# dropped entirely, the same underlying column-boundary misjudgement as the
+# fully-blank case, just with the wrong column surviving instead of none).
+_SCHEDULE_REF_ONLY_RE = re.compile(r'^\d{1,2}[a-zA-Z]?(\s*&\s*\d{1,2})?$')
+
+
 def _has_blank_label_artifacts(tables: list[list[list[str]]]) -> bool:
     """
     Detect a fourth corruption mode (seen on HDFC Bank's Balance Sheet):
     pdfplumber misjudges the column boundary and drops the label column
-    entirely, leaving every row's first cell blank while the value columns
-    are intact. Symptom: most data rows (excluding the header row) have an
-    empty label but at least one numeric value.
+    entirely, leaving every row's first cell blank (or, on ICICI Bank, just
+    the Schedule reference number) while the value columns are intact.
+    Symptom: most data rows (excluding the header row) have no usable label
+    but at least one numeric value.
     """
     for table in tables:
         if len(table) < 4:
             continue
         data_rows = table[1:]
-        blank_with_value = sum(
+        unusable_label_with_value = sum(
             1 for row in data_rows
-            if row and not (row[0] or "").strip()
+            if row
+            and (not (row[0] or "").strip() or _SCHEDULE_REF_ONLY_RE.match((row[0] or "").strip()))
             and any(_parse_number_loose(c) is not None for c in row[1:])
         )
-        if data_rows and blank_with_value / len(data_rows) > 0.5:
+        if data_rows and unusable_label_with_value / len(data_rows) > 0.5:
             return True
     return False
 
