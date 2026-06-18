@@ -156,6 +156,21 @@ def _match_label(label: str, stmt_type: str) -> str | None:
     return None
 
 
+# Balance Sheet section headers that have no text label of their own subtotal
+# row in some PDFs (Asian Paints renders "Total Non-Current Assets" etc. as
+# just a bolded number with a rule above it — no "Total X" text exists in the
+# PDF's text layer at all). When normalize_table hits a value-only row with
+# a blank label, it infers the standard item from the most recently seen
+# section header below.
+_BS_SECTION_MAP = {
+    "non-current assets": "Non-Current Assets",
+    "current assets": "Current Assets",
+    "non-current liabilities": "Non-Current Liabilities",
+    "current liabilities": "Current Liabilities",
+    "equity": "Total Equity",
+}
+
+
 def normalize_table(
     raw_table: list[list[str]],
     stmt_type: str,
@@ -173,6 +188,7 @@ def normalize_table(
 
     result: dict[str, float | None] = {}
     other_counter = 1
+    current_section: str | None = None
 
     # Find first column index that has numeric data
     n_cols = max(len(row) for row in raw_table)
@@ -190,17 +206,29 @@ def normalize_table(
         return {}
 
     for row in raw_table:
-        if not row or not row[0]:
+        if not row:
             continue
-        raw_label = row[0].strip()
+        raw_label = (row[0] or "").strip()
+        value = _parse_number(row[value_col]) if value_col < len(row) else None
+
         if not raw_label:
+            # Blank label with a value — an unlabeled subtotal row (see
+            # _BS_SECTION_MAP). Assign it to the section we're currently in.
+            if stmt_type == "bs" and current_section and value is not None:
+                standard = _BS_SECTION_MAP[current_section]
+                if standard not in result:
+                    result[standard] = value
+                current_section = None
             continue
+
+        if stmt_type == "bs":
+            label_key = raw_label.lower().strip()
+            if label_key in _BS_SECTION_MAP:
+                current_section = label_key
 
         # Skip header rows (all-caps short strings, or year-like)
         if _YEAR_RE.search(raw_label) and len(raw_label) < 15:
             continue
-
-        value = _parse_number(row[value_col]) if value_col < len(row) else None
 
         standard = _match_label(raw_label, stmt_type)
         if standard:

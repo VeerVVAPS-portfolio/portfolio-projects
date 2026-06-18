@@ -71,6 +71,11 @@ PNL_SYNONYMS: dict[str, list[str]] = {
         "total net revenue",
         "sales and services",
         "income from operations",
+        "revenue from sale of products",  # Asian Paints: no combined "revenue
+        "revenue from sale of goods",     # from operations" subtotal line —
+                                           # products/services/other are shown
+                                           # separately, so the products line
+                                           # (the dominant figure) is used.
     ],
     "Cost of Revenue": [
         "cost of goods sold",
@@ -341,6 +346,7 @@ CF_SYNONYMS: dict[str, list[str]] = {
         "cash and cash equivalents at beginning",
         "balance at beginning",
         "at the beginning of the year",
+        "cash and cash equivalents as at 1st april",  # Asian Paints phrasing
     ],
     "Closing Cash Balance": [
         "closing cash",
@@ -349,6 +355,7 @@ CF_SYNONYMS: dict[str, list[str]] = {
         "cash and cash equivalents at end",
         "balance at end",
         "at the end of the year",
+        "cash and cash equivalents as at 31st march",  # Asian Paints phrasing
     ],
 }
 

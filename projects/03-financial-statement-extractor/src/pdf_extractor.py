@@ -226,24 +226,31 @@ def find_statement_pages(pdf_file: bytes | BinaryIO) -> dict[str, list[int]]:
         best_text = get_sorted_text(best_idx, best_col).lower()
         is_contd = any(m in best_text[:200] for m in ["(contd.)", "(continued)", "continued..."])
 
-        pages: list[tuple[int, str]] = []
-        if is_contd and best_idx > 0:
-            pages.append((best_idx - 1, best_col))
-        pages.append((best_idx, best_col))
-
-        # If the OPPOSITE column of this same page has the SAME statement's
-        # heading too, it's one statement flowing across both halves (e.g.
-        # Maruti's Cash Flow: operating activities in the left column,
-        # investing/financing in the right — both columns say "Standalone
-        # Statement of Cash Flows"). Different statements sharing a page
-        # (Balance Sheet left / P&L right) have DIFFERENT headings per side,
-        # so this check only fires for genuine continuations.
-        if best_col in ("left", "right"):
-            opposite_col = "right" if best_col == "left" else "left"
-            opp_text = get_sorted_text(best_idx, opposite_col)
+        # If the OPPOSITE column of a page has the SAME statement's heading
+        # too, it's one statement flowing across both halves (e.g. Maruti's
+        # Cash Flow: operating activities in the left column, investing/
+        # financing in the right — both columns say "Standalone Statement of
+        # Cash Flows"; Asian Paints' financing section sits in the left
+        # column of a page where we matched via the right). Different
+        # statements sharing a page (Balance Sheet left / P&L right) have
+        # DIFFERENT headings per side, so this only fires for genuine
+        # continuations. Checked for every page added, not just the first —
+        # the opposite column can hold the continuation on ANY page, not
+        # only the one where the statement was first found.
+        def add_with_opposite_column(idx: int, col: str) -> None:
+            pages.append((idx, col))
+            if col not in ("left", "right"):
+                return
+            opposite_col = "right" if col == "left" else "left"
+            opp_text = get_sorted_text(idx, opposite_col)
             opp_lines = [ln.strip() for ln in opp_text.split('\n') if ln.strip()]
             if opp_lines and _keyword_in_heading(opp_lines, _PAGE_KEYWORDS[stmt_type]):
-                pages.append((best_idx, opposite_col))
+                pages.append((idx, opposite_col))
+
+        pages: list[tuple[int, str]] = []
+        if is_contd and best_idx > 0:
+            add_with_opposite_column(best_idx - 1, best_col)
+        add_with_opposite_column(best_idx, best_col)
 
         for offset in (1, 2, 3):
             next_idx = best_idx + offset
@@ -264,7 +271,7 @@ def find_statement_pages(pdf_file: bytes | BinaryIO) -> dict[str, list[int]]:
             ) or _keyword_in_heading(next_lines, _OTHER_SECTION_KEYWORDS)
             if is_new_statement:
                 break
-            pages.append((next_idx, best_col))
+            add_with_opposite_column(next_idx, best_col)
         found[stmt_type] = pages
 
     doc.close()
@@ -469,17 +476,15 @@ def _words_to_table(page) -> list[list[str]]:
 # ── Text-line fallback ────────────────────────────────────────────────────────
 
 # A single numeric token: comma-grouped (162,990 or 1,62,990), plain (416),
-# or parenthesised for negative (12,345) or (848). One regex for everything —
-# see _text_to_table for why a single unified pass beats separate "comma vs
-# plain" paths.
-_NUM_TOKEN_RE = re.compile(r'\(?-?\d{1,3}(?:,\d{2,3})*\)?')
-
-# Decimal-style note references (Infosys's "2.18", "2.14") — stripped from the
-# line BEFORE token matching. Without this, "Trade payables ... 2.14" (a
-# section header with no values, just a note ref) would have its "2.14" split
-# into two fragments ("2", "14") by _NUM_TOKEN_RE, which then look exactly
-# like a valid pair of year-column values and get wrongly captured as such.
-_DECIMAL_NOTE_REF_RE = re.compile(r'\b\d{1,2}\.\d{1,2}\b')
+# parenthesised for negative (12,345) or (848), with an optional decimal
+# suffix (29,270.69 — Asian Paints reports to 2 decimal places, unlike
+# Infosys/TCS/Maruti which round to whole crores). The decimal suffix MUST
+# be part of the same token: without "(?:\.\d+)?" here, "29,270.69" matches
+# only "29,270" and the ".69" becomes a second, spurious token ("69"),
+# corrupting which two tokens get picked as the year-column values.
+# One regex for everything — see _text_to_table for why a single unified
+# pass beats separate "comma vs plain" paths.
+_NUM_TOKEN_RE = re.compile(r'\(?-?\d{1,3}(?:,\d{2,3})*(?:\.\d+)?\)?')
 
 # Cosmetic only: strips a trailing decimal-style note ref from a label after
 # slicing, so "Other:" rows don't show leftover digits.
@@ -504,6 +509,14 @@ def _text_to_table(text: str) -> list[list[str]]:
     current-year figure. Taking the last two tokens by position, regardless
     of which format each one uses, fixes this and is simpler than maintaining
     two diverging code paths.
+
+    An earlier version pre-stripped decimal-shaped note refs ("2.18") before
+    tokenizing, to stop a lone note ref from being mistaken for a value. That
+    broke on Asian Paints, which reports to 2 decimal places: a real value
+    like "95.92" (Share Capital) has the exact same shape as a note ref and
+    got stripped too. Removed — the magnitude >= 100 guard on single-token
+    rows below already rejects small note-ref-like numbers, without needing
+    to special-case their format.
     """
     rows: list[list[str]] = []
 
@@ -512,19 +525,29 @@ def _text_to_table(text: str) -> list[list[str]]:
         if not line:
             continue
 
-        cleaned_line = _DECIMAL_NOTE_REF_RE.sub("", line).strip()
-        matches = [m for m in _NUM_TOKEN_RE.finditer(cleaned_line) if any(c.isdigit() for c in m.group())]
+        matches = [m for m in _NUM_TOKEN_RE.finditer(line) if any(c.isdigit() for c in m.group())]
 
         def make_row(val_matches: list[re.Match]) -> list[str]:
-            label = cleaned_line[: val_matches[0].start()].strip()
+            label = line[: val_matches[0].start()].strip()
             label = _NOTE_REF_RE.sub("", label).strip()
             return [label] + [m.group() for m in val_matches]
 
+        def magnitude(token: str) -> float:
+            try:
+                return abs(float(token.strip("()").replace(",", "")))
+            except ValueError:
+                return 0.0
+
         if len(matches) >= 2:
             rows.append(make_row(matches[-2:]))
-        elif len(matches) == 1 and len(re.sub(r'\D', '', matches[0].group())) >= 2:
-            # Single number with >= 2 digits — large enough to be a real value
-            # (filters out stray single-digit footnote markers)
+        elif len(matches) == 1 and magnitude(matches[0].group()) >= 100:
+            # Single number with value >= 100 — large enough to be a real
+            # financial figure, not a stray note-reference number. A header
+            # line like "Trade Receivables" can have its OWN note ref ("10")
+            # land on its own line with no real value beside it (the actual
+            # figures appear on a separate following row); without this
+            # threshold, "10" gets treated as the value and blocks the
+            # correct row from matching afterward.
             rows.append(make_row(matches[-1:]))
         else:
             # No usable numbers — section header or label-only row.
