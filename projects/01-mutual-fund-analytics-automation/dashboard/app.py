@@ -55,6 +55,35 @@ html, body, [class*="css"] {
 @keyframes fadeIn   { from{opacity:0} to{opacity:1} }
 @keyframes countUp  { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
 
+/* Modern Streamlit (1.4x+) renamed its CSS-module classnames from
+   "css-xxxxx" to "st-emotion-cache-xxxxx", which silently broke the old
+   [class*="css"] trick for the main content panel and header — only the
+   explicitly-targeted [data-testid="stSidebar"] still picked up the dark
+   theme, leaving the main panel on Streamlit's default white background.
+   Target the stable data-testid hooks directly instead. */
+[data-testid="stAppViewContainer"], [data-testid="stMain"], [data-testid="stHeader"] {
+    background-color: var(--bg) !important;
+}
+[data-testid="stHeader"] { background-color: transparent !important; }
+
+/* Streamlit's native widget labels (slider/radio captions) render with the
+   framework's own light-theme text color and aren't reliably caught by the
+   global override above — force them to the readable muted tone. */
+[data-testid="stWidgetLabel"] p, .stRadio label p, .stSlider label p {
+    color: var(--t2) !important;
+}
+
+/* st.caption() renders its container at 60% opacity by default, which
+   combined with an already-muted text color drops effective contrast well
+   below WCAG AA — these captions carry real explanatory content, not
+   decorative chrome, so force full opacity and a legible color. */
+[data-testid="stCaptionContainer"] {
+    opacity: 1 !important;
+}
+[data-testid="stCaptionContainer"] p {
+    color: var(--t2) !important;
+}
+
 /* ── Global overrides ── */
 .block-container { padding-top: 2.5rem !important; max-width: 1100px !important; }
 [data-testid="stSidebar"] {
