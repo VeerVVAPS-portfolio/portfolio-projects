@@ -308,6 +308,12 @@ Each fix added a targeted exclusion or detector rather than a blanket rule — n
 | Investing CF | ₹-1,946 Cr | ✓ |
 | Financing CF | ₹-24,161 Cr | ✓ |
 
+**Known issue (found 2026-06-19, not yet fixed): detail-row noise underneath correct totals.** The headline figures above are still verified correct — but they only check the few summary totals (Assets = Liabilities + Equity, CF nets to change in cash). Re-running the same Infosys PDF and inspecting every individual row (surfaced by the dashboard's new "unmatched row" highlighting) found real noise has been leaking into the "Other:" bucket for years without anyone checking row-by-row:
+1. **Signature-block text captured as data rows** — auditor firm registration numbers, DIN numbers, signing dates (e.g. "Membership No. 060408 DIN: 00041245") are on the same PDF page as the real table and get scooped up as if they were line items.
+2. **Cash Flow detail rows partially sourced from the wrong table** — dash-filled placeholder cells (e.g. "– – – – (14,692) – – – –") belong to the Statement of Changes in Equity, a different statement entirely, not Cash Flow. The CF table-merge logic is pulling in an adjacent table it shouldn't.
+
+This means the "8/9 fully reconcile" claim is accurate for the totals it checks, but doesn't mean every detail row is clean — that's a gap in the validation method, not just the extraction. Paused (not fixed) as of 2026-06-19; pick up by reproducing against the Infosys AR PDF and adding (a) a row-level filter that rejects signature-block-shaped labels, (b) a tighter same-page table-boundary check so Cash Flow doesn't merge in the equity-statement table.
+
 ---
 
 ## General Interview Points Across All Projects

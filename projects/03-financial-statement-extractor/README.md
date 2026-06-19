@@ -38,6 +38,7 @@ Banks use a completely different statement structure (Banking Regulation Act for
 - Complex merged-cell tables may partially extract — always verify numbers against the source
 - Works best with Indian company annual reports (Ind AS / Banking Regulation Act format)
 - Unusual column layouts (a label column that overflows past where the value columns start) can occasionally split a label from its value — seen once, on Page Industries' Cash Flow page
+- **Known issue (open as of 2026-06-19):** headline totals (Revenue, Net Profit, Total Assets/Equity, CF subtotals) are verified correct, but detail rows underneath can contain noise — auditor signature-block text (DIN/membership numbers, signing dates) occasionally gets captured as a line item, and Cash Flow detail rows can pull in rows from the adjacent Statement of Changes in Equity table. See `INTERVIEW_PREP.md` for the full repro notes. Not yet fixed.
 
 ## Tech Stack
 
