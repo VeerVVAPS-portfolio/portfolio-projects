@@ -12,10 +12,6 @@ yfinance>=0.2
 openai>=1.0
 python-dotenv>=1.0
 
-# Project 3 — Financial Statement Extractor
-pdfplumber>=0.10
-pymupdf>=1.24
-
 # Project 4 — Black-Litterman Portfolio
 numpy>=1.24
 scipy>=1.10
